@@ -1,5 +1,5 @@
 ------------------------------------------
--- PROJET 07-08 - micro java : grammaire LL(3)
+-- PROJET 08-09 - micro java : grammaire LL(3)
 -- au format EGG5
 ------------------------------------------
 option auto= true;
@@ -7,18 +7,18 @@ option version = 0.0.1 ;
 option k=3;
 
 -- les attributs semantiques
-syn param : Object for ARGS, ARGSX;
+syn param : ListeParam for ARGS, ARGSX;
 inh source : MJAVASourceFile for PROGRAMME;
-inh tds : TDS for SIX, ER, E, BLOC, INSTS, INST, DEF, CLASSES, DEFCLASSE, PROGRAMME, DEFS;
-inh tdc : TDC for DEFCLASSE, DEFS;
-inh tdv    : TDV for PARFS, INSTS, INST, PARFSX, PARF, BLOC;
+--inh tds : TDS for SIX, ER, E, BLOC, INSTS, INST, DEF, CLASSES, DEFCLASSE, PROGRAMME, DEFS;
+inh tdc : TDC for DEFCLASSE, DEFS, CLASSES;
+inh tdv    : TDV for PARFS, INSTS, INST, PARFSX, PARF, BLOC, SIX;
 inh infoClasseCourante : INFOClasse for DEFS, DEF;
-inh infoMethodeCourante : INFOMethode for BLOC, PARFS, PARFSX, PARF;
+inh infoMethodeCourante : INFOMethode for BLOC, PARFS, PARFSX, PARF, INSTS, INST, SIX;
 -- les terminaux 
 syn extension  : String for EXTENSION;
 syn type   : String for TYPE, E, ER, AFFX, ES, ES, T, OPREL, ERX, ERX, OPADD, ESX, ESX, F, TX, OPMUL, OPUN, Q;
 
-inh typeRetour : String for BLOC;
+inh typeRetour : String for BLOC, INSTS, INST, SIX;
 
 
 space separateur is  "[\r\n\t ]+";
@@ -71,9 +71,10 @@ term entier is  "[0-9]+";
 term ident is  "[_A-Za-z][_0-9A-Za-z]*";
 
 ---------- REGLES DE PRODUCTION ----------------------------------------
-PROGRAMME -> #init CLASSES #gen ;
+PROGRAMME -> #init  #tdc CLASSES #gen;
 global
    machine : AbstractMachine;
+   tdc : TDC;
 #init {
 do
    machine := PROGRAMME^source.getMachine();  
@@ -86,15 +87,22 @@ do
 end
 }
 
-CLASSES -> ;
-CLASSES -> DEFCLASSE CLASSES;
+#tdc {
+do
+    tdc := new TDC();
+    CLASSES^tdc := tdc;
+end
+}
+
+CLASSES ->;
+CLASSES -> DEFCLASSE CLASSES ;
 -- definition d'une classe
-DEFCLASSE -> classe ident EXTENSION aco #tds DEFS acf ;
-#tds{
+DEFCLASSE -> classe ident EXTENSION aco #tdc DEFS acf ;
+#tdc{
 local
 infoClasse : INFOClasse ;
 do
-    infoClasse := new INFOClasse(ident^txt,0, CLASSES^tds.rechercherGlobalement(EXTENSION^extension)) ;
+    infoClasse := new INFOClasse(ident^txt,0, DEFCLASSE^tdc.rechercherGlobalement(EXTENSION^extension)) ;
     call DEFCLASSE^tdc.inserer(infoClasse) ;
     DEFS^infoClasseCourante := infoClasse ;
 end
@@ -114,7 +122,7 @@ do
 end
 }
 
--- les attributs
+-- les attributs    (DEFS = le code de la classe)
 DEFS ->   ;
 DEFS ->  DEF DEFS   ;
 -- attribut
@@ -148,6 +156,7 @@ do
     BLOC^tdv := new TDV(infoMeth.getTDV());
     BLOC^typeRetour := TYPE^type;
     BLOC^infoMethodeCourante := infoMeth;
+    PARFS^infoMethodeCourante := infoMeth;
 end
 }
 -- methode (procedure)
@@ -169,10 +178,11 @@ do
     BLOC^tdv := new TDV(infoMeth.getTDV());
     BLOC^typeRetour := "void";
     BLOC^infoMethodeCourante := infoMeth;
+    PARFS^infoMethodeCourante := infoMeth;
 end
 }
 -- constructeur
-DEF -> ident #tdm paro PARFS parf BLOC ;
+DEF -> ident paro #tdm PARFS parf BLOC ;
 global
 infoMeth : INFOMethode;
 #tdm {
@@ -190,6 +200,7 @@ do
     BLOC^tdv := new TDV(infoMeth.getTDV());
     BLOC^typeRetour := "";
     BLOC^infoMethodeCourante := infoMeth;
+    PARFS^infoMethodeCourante := infoMeth;
 end
 }
 -- les types
@@ -222,7 +233,7 @@ PARF ->  TYPE ident  #tdm;
 local 
     t:TYPE;
 do
-    t := new TYPE(TYPE^type, 1); -- On décide de fixer toutes les tailles à 1.
+    t := new TYPE(TYPE^type, 1); -- On decide de fixer toutes les tailles a 1.
     call PARF^infoMethodeCourante.ajouterParam(ident^txt, t);
 end
 }
@@ -234,6 +245,7 @@ tdv : TDV ;
 do
     tdv := new TDV(BLOC^tdv) ;
     INSTS^tdv := tdv ;
+  
 end
 }
 
@@ -241,15 +253,21 @@ end
 INSTS ->   ;
 INSTS ->  INST INSTS  ;
 -- declaration de variable locale avec ou sans init
-INST->  TYPE ident #tdv AFFX pv ;
+INST->  TYPE ident AFFX #tdv pv ;
 global
 variable : INFOVariable ;
 #tdv {
 do
-variable := INST^tdv.chercherLocalement(ident^txt);
-variable := new INFOVariable(ident^txt, TYPE^type);
 
-call INST^tdv.inserer(variable);
+variable := INST^tdv.chercherLocalement(ident^txt);
+    if variable /= nil then
+        error(B_00, ident^txt);
+    elseif ~TYPE^type.compareTo(AFFX^type) then
+      error(B_02, TYPE^type, AFFX^type);
+    else
+        variable := new INFOVariable(ident^txt, TYPE^type);
+        call INST^tdv.inserer(variable);
+    end
 end
 }
 
@@ -286,7 +304,6 @@ do
     AFFX^type := "";      
 end
 }
--- relation
 -- relation
 ER ->   ES ERX #type;
 #type{
@@ -476,20 +493,14 @@ do
 end
 }
 -- null
-F -> nil  #type ;
+F -> null  #type ;
 #type{
 do
     F^type := "";
 end
 }
 
-F ->  #fix_inh_init paro E parf #type ;
-#fix_inh_init {
-do
-	E^tds := nil;
-end
-}
-
+F ->   paro E parf #type ;
 #type{
 do
     F^type := E^type;
@@ -541,7 +552,7 @@ end
 
 #add{
 do
-    ARGSX^param := ARGSX1^param.ajouterParam(E^type);
+    ARGS^param := ARGSX^param.ajouterParam(E^type);
 end
 }
 ARGS -> #create;
@@ -551,8 +562,8 @@ do
 end
 }
 
-ARGSX ->   virg E ARGSX  #sign ;
-#sign{
+ARGSX ->   virg E ARGSX  #param ;
+#param{
 do
     ARGSX^param := ARGSX1^param.ajouterParam(E^type);
 end
@@ -561,8 +572,9 @@ end
 ARGSX -> #create;
 #create{
 do
-    ARGS^param := new ListeParam();
+    ARGSX^param := new ListeParam();
 end
 }
 
 end
+

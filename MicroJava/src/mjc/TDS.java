@@ -36,6 +36,7 @@ public class TDS extends HashMap<String, INFO> {
 	}
 
 	public String toString() {
+		System.out.println("coucou");
 		StringBuffer sb = new StringBuffer();
 		Set<Map.Entry<String, INFO>> s = entrySet();
 		for (Map.Entry<String, INFO> e : s){
