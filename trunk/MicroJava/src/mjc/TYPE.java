@@ -26,5 +26,9 @@ public class TYPE {
 		this.taille = taille;
 	}
 	
+	public boolean compareTo(TYPE autre) {
+		return nom.equals(autre.nom);
+	}
+	
 	
 }
