@@ -1,0 +1,568 @@
+------------------------------------------
+-- PROJET 07-08 - micro java : grammaire LL(3)
+-- au format EGG5
+------------------------------------------
+option auto= true;
+option version = 0.0.1 ;
+option k=3;
+
+-- les attributs semantiques
+syn param : Object for ARGS, ARGSX;
+inh source : MJAVASourceFile for PROGRAMME;
+inh tds : TDS for SIX, ER, E, BLOC, INSTS, INST, DEF, CLASSES, DEFCLASSE, PROGRAMME, DEFS;
+inh tdc : TDC for DEFCLASSE, DEFS;
+inh tdv    : TDV for PARFS, INSTS, INST, PARFSX, PARF, BLOC;
+inh infoClasseCourante : INFOClasse for DEFS, DEF;
+inh infoMethodeCourante : INFOMethode for BLOC, PARFS, PARFSX, PARF;
+-- les terminaux 
+syn extension  : String for EXTENSION;
+syn type   : String for TYPE, E, ER, AFFX, ES, ES, T, OPREL, ERX, ERX, OPADD, ESX, ESX, F, TX, OPMUL, OPUN, Q;
+
+inh typeRetour : String for BLOC;
+
+
+space separateur is  "[\r\n\t ]+";
+space comm is  "\/\/[^\n]*\n";
+sugar import is  "import";
+sugar paro is  "\(";
+sugar parf is  "\)";
+sugar aco is  "\{";
+sugar acf is  "\}";
+sugar cro is  "\[";
+sugar crf is  "\]";
+sugar virg is  ",";
+sugar pv is  "\;";
+sugar pt is  "\.";
+sugar affect is  "=";
+sugar si is  "if";
+sugar sinon is  "else";
+sugar tantque is  "while";
+sugar void is  "void";
+sugar int is  "int";
+sugar bool is  "boolean";
+sugar classe is  "class";
+sugar etend is  "extends";
+sugar retour is  "return";
+sugar nouveau is  "new";
+sugar public is  "public";
+sugar prive is  "private";
+sugar protect is  "protected";
+sugar static is  "static";
+sugar null is  "null";
+sugar inf is  "\<";
+sugar infeg is  "\<=";
+sugar sup is  "\>";
+sugar supeg is  "\>=";
+sugar eg is  "==";
+sugar neg is  "\!=";
+sugar plus is  "\+";
+sugar moins is  "\-";
+sugar ou is  "\|\|";
+sugar mult is  "\*";
+sugar div is  "\/";
+sugar mod is  "\%" ; 
+sugar et is  "\&\&";
+sugar non is  "\!";
+sugar vrai is  "true"; 
+sugar faux is  "false";
+sugar this is  "this";
+sugar super is  "super";
+term entier is  "[0-9]+";
+term ident is  "[_A-Za-z][_0-9A-Za-z]*";
+
+---------- REGLES DE PRODUCTION ----------------------------------------
+PROGRAMME -> #init CLASSES #gen ;
+global
+   machine : AbstractMachine;
+#init {
+do
+   machine := PROGRAMME^source.getMachine();  
+end
+}
+
+#gen {
+do
+  call machine.writeCode(PROGRAMME^source.getFileName(), "");
+end
+}
+
+CLASSES -> ;
+CLASSES -> DEFCLASSE CLASSES;
+-- definition d'une classe
+DEFCLASSE -> classe ident EXTENSION aco #tds DEFS acf ;
+#tds{
+local
+infoClasse : INFOClasse ;
+do
+    infoClasse := new INFOClasse(ident^txt,0, CLASSES^tds.rechercherGlobalement(EXTENSION^extension)) ;
+    call DEFCLASSE^tdc.inserer(infoClasse) ;
+    DEFS^infoClasseCourante := infoClasse ;
+end
+}
+-- heritage
+EXTENSION -> etend ident #ext;
+#ext{
+do
+	EXTENSION^extension := ident^txt;
+end
+}
+
+EXTENSION -> #ext;
+#ext{
+do
+    EXTENSION^extension := "";
+end
+}
+
+-- les attributs
+DEFS ->   ;
+DEFS ->  DEF DEFS   ;
+-- attribut
+DEF ->  TYPE ident pv #att;
+#att {
+local
+listeAttributs : TDA ;
+attribut : INFOAttr ;
+do
+    listeAttributs := DEF^infoClasseCourante.getAttributs();
+    attribut := new INFOAttr(ident^txt, TYPE^type);
+    call listeAttributs.inserer(attribut);
+end
+}
+-- methode (fonction)
+DEF ->  TYPE ident #tdm paro PARFS parf BLOC  ;
+global
+infoMeth : INFOMethode ;
+#tdm {
+local
+listeMethodes : TDM ;
+type_retour : String ;
+do
+    listeMethodes := DEF^infoClasseCourante.getTDM();
+    infoMeth := listeMethodes.chercherGlobalement(ident^txt);
+    if (infoMeth = nil) then
+        infoMeth := new INFOMethode(ident^txt, TYPE^type);
+        call listeMethodes.inserer(infoMeth);
+    end
+    PARFS^tdv := infoMeth.getTDV();
+    BLOC^tdv := new TDV(infoMeth.getTDV());
+    BLOC^typeRetour := TYPE^type;
+    BLOC^infoMethodeCourante := infoMeth;
+end
+}
+-- methode (procedure)
+DEF -> void ident #tdm  paro PARFS parf BLOC ;
+global
+infoMeth : INFOMethode;
+#tdm {
+local
+listeMethodes : TDM ;
+typeRetour : String ;
+do
+    listeMethodes := DEF^infoClasseCourante.getTDM();
+    infoMeth := listeMethodes.chercher(ident^txt);
+    if (infoMeth = nil) then
+        infoMeth := new INFOMethode(ident^txt, "void");
+        call listeMethodes.inserer(infoMeth);
+    end
+    PARFS^tdv := infoMeth.getTDV();
+    BLOC^tdv := new TDV(infoMeth.getTDV());
+    BLOC^typeRetour := "void";
+    BLOC^infoMethodeCourante := infoMeth;
+end
+}
+-- constructeur
+DEF -> ident #tdm paro PARFS parf BLOC ;
+global
+infoMeth : INFOMethode;
+#tdm {
+local
+listeMethodes : TDM ;
+typeRetour : String ;
+do
+    listeMethodes := DEF^infoClasseCourante.getTDM();
+    infoMeth := listeMethodes.chercher(ident^txt);
+    if (infoMeth = nil) then
+        infoMeth := new INFO_METHODE(ident^txt, "");
+        call listeMethodes.inserer(infoMeth);
+    end
+    PARFS^tdv := infoMeth.getTDV();
+    BLOC^tdv := new TDV(infoMeth.getTDV());
+    BLOC^typeRetour := "";
+    BLOC^infoMethodeCourante := infoMeth;
+end
+}
+-- les types
+TYPE-> int  #type;
+#type {
+do
+    TYPE^type := "int";
+end
+}
+TYPE-> bool #type;
+#type {
+do
+    TYPE^type := "boolean";
+end
+}
+TYPE-> ident #type;
+#type {
+do
+    TYPE^type := ident^txt;
+end
+}
+
+-- parametres de methodes
+PARFS ->  ;
+PARFS ->  PARF PARFSX ;
+PARFSX ->  ;
+PARFSX -> virg  PARF  PARFSX ;
+PARF ->  TYPE ident  #tdm;
+#tdm {
+local 
+    t:TYPE;
+do
+    t := new TYPE(TYPE^type, 1); -- On décide de fixer toutes les tailles à 1.
+    call PARF^infoMethodeCourante.ajouterParam(ident^txt, t);
+end
+}
+-- corps de methode et bloc d'instructions
+BLOC ->  aco #tdv INSTS acf  ;
+global
+tdv : TDV ;
+#tdv {
+do
+    tdv := new TDV(BLOC^tdv) ;
+    INSTS^tdv := tdv ;
+end
+}
+
+-- instructions
+INSTS ->   ;
+INSTS ->  INST INSTS  ;
+-- declaration de variable locale avec ou sans init
+INST->  TYPE ident #tdv AFFX pv ;
+global
+variable : INFOVariable ;
+#tdv {
+do
+variable := INST^tdv.chercherLocalement(ident^txt);
+variable := new INFOVariable(ident^txt, TYPE^type);
+
+call INST^tdv.inserer(variable);
+end
+}
+
+-- instruction expression
+INST ->  E pv ;
+-- bloc d'instructions
+INST ->  BLOC  ;
+-- conditionnelle
+INST ->  si paro E parf BLOC SIX ;
+
+SIX ->   sinon BLOC ;
+SIX ->;
+-- return
+INST ->  retour E pv ;
+-- tant que
+INST ->  tantque paro E parf BLOC ;
+-- les expressions
+E ->  ER AFFX #type ;
+#type{
+do
+    E^type := ER^type;
+end
+}
+-- affectation
+AFFX ->  affect ER  #type ;
+#type{
+do
+    AFFX^type := ER^type;
+end
+}
+AFFX -> #type ;
+#type{
+do
+    AFFX^type := "";      
+end
+}
+-- relation
+-- relation
+ER ->   ES ERX #type;
+#type{
+do
+    ER^type := ES^type;
+end
+}
+
+ES ->  T ESX #type;
+#type{
+do
+    ES^type := T^type;
+end
+}
+
+ERX ->  OPREL ES #type ;
+#type{
+do
+    ERX^type := OPREL^type;
+end
+}
+ERX -> #type ;
+#type{
+do
+    ERX^type := "";
+end
+}
+
+OPREL -> inf #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+OPREL -> infeg #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+OPREL -> sup #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+OPREL -> supeg #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+OPREL -> eg #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+OPREL -> neg #type ;
+#type{
+do
+    OPREL^type := "boolean";
+end
+}
+-- addition, ...
+ESX ->   OPADD T ESX #type ;
+#type{
+do
+    ESX^type := OPADD^type;
+end
+}
+ESX -> #type ;
+#type{
+do
+    ESX^type := "";
+end
+}
+OPADD -> plus #type ;
+#type{
+do
+    OPADD^type := "int";
+end
+}
+OPADD -> moins #type ;
+#type{
+do
+    OPADD^type := "int";
+end
+}
+OPADD -> ou #type ;
+#type{
+do
+    OPADD^type := "boolean";
+end
+}
+
+T ->  F TX #type ;
+#type{
+do
+    T^type := F^type;
+end
+}
+
+-- multiplication, ...
+TX ->   OPMUL F TX #type ;
+#type{
+do
+    TX^type := OPMUL^type;
+end
+}
+
+TX -> #type ;
+#type{
+do
+    TX^type := "";               
+end
+}
+
+OPMUL -> mult #type ;
+#type{
+do
+    OPMUL^type := "int";
+end
+}
+OPMUL -> div #type ;
+#type{
+do
+    OPMUL^type := "int";
+end
+}
+OPMUL -> mod #type ;
+#type{
+do
+    OPMUL^type := "int";
+end
+}
+OPMUL -> et #type ;
+#type{
+do
+    OPMUL^type := "boolean";
+end
+}
+-- expressions de base
+F -> entier #type ;
+#type{
+do
+    F^type := "int";
+end
+}
+
+F -> vrai #type ;
+#type{
+do
+    F^type := "boolean";
+end
+}
+F -> faux  #type ;
+#type{
+do
+    F^type := "boolean";
+end
+}
+-- unaire
+F ->  OPUN F #type ;
+#type{
+do
+    F^type := OPUN^type;
+end
+}
+
+OPUN -> plus #type ;
+#type{
+do
+    OPUN^type := "boolean";
+end
+}
+OPUN -> moins #type ;
+#type{
+do
+    OPUN^type := "boolean";
+end
+}
+OPUN -> non #type ;
+#type{
+do
+    OPUN^type := "boolean";
+end
+}
+-- null
+F -> nil  #type ;
+#type{
+do
+    F^type := "";
+end
+}
+
+F ->  #fix_inh_init paro E parf #type ;
+#fix_inh_init {
+do
+	E^tds := nil;
+end
+}
+
+#type{
+do
+    F^type := E^type;
+end
+}
+
+-- new
+F -> nouveau  TYPE paro ARGS parf  #type ;
+#type{
+do
+    F^type := TYPE^type;
+end
+}
+
+-- acces variable ou methode 
+F ->  ident Q #type ;
+#type{
+do
+    F^type := Q^type;
+end
+}
+-- Q = qualificateur de variable
+Q ->  #type ;
+#type{
+do
+    Q^type := "";
+end
+}
+-- acces attribut
+Q ->  pt ident  Q #type ;
+#type{
+do
+    Q^type := "";
+end
+}
+-- arguments d'appel de methode
+Q ->  paro ARGS parf Q #type ;
+#type{
+do
+    Q^type := "";
+end
+}
+ARGS ->  #create E ARGSX #add;
+#create{
+do
+    ARGS^param := new ListeParam();
+end
+}
+
+#add{
+do
+    ARGSX^param := ARGSX1^param.ajouterParam(E^type);
+end
+}
+ARGS -> #create;
+#create{
+do
+    ARGS^param := new ListeParam();
+end
+}
+
+ARGSX ->   virg E ARGSX  #sign ;
+#sign{
+do
+    ARGSX^param := ARGSX1^param.ajouterParam(E^type);
+end
+}
+
+ARGSX -> #create;
+#create{
+do
+    ARGS^param := new ListeParam();
+end
+}
+
+end
